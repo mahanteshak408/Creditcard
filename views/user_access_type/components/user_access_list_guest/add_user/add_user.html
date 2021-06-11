@@ -1,0 +1,166 @@
+<div>
+    <!---------------------------------------------------------->
+    <template>
+        <v-card flat v-if="ApiError" raised class="text-center ml-2 mr-2">
+            <v-card-text class="mt-1 title text-center">
+                {{errorMsg}}
+                <p class="mb-0">
+                    <v-btn depressed color="primary" @click="ApiError = false" class="ma-0 mt-2">
+                        Invite
+                    </v-btn>
+                </p>
+            </v-card-text>
+        </v-card>
+        <v-card flat v-else>
+            <v-card-text class="pa-0 px-2">
+                <v-form v-model="valid" ref="addUserForm" lazy-validation action="javascript:void(0)">
+                    <v-text-field append-icon="email" label="Email" single-line :rules="emailIdRules"
+                        v-model="userEmailId" autocapitalize="off" type="email" outlined></v-text-field>
+                    <v-layout wrap justify-space-between v-if="appliancePermission.isLifeTimeAccess">
+                        <v-flex xs12>
+                            <p class="mb-0 subheading pt-2">Validity</p>
+                            <v-radio-group :rules="radioBtnRules" v-model="isLifeTimeAccess" class="mt-0">
+                                <v-radio color="primary" label="Never Expires" value="true"></v-radio>
+                                <v-radio color="primary" label="Valid: From/To" value="false"></v-radio>
+                            </v-radio-group>
+                        </v-flex>
+                    </v-layout>
+
+                    <v-layout wrap justify-space-around
+                        v-if="isLifeTimeAccess == 'false' || !appliancePermission.isLifeTimeAccess">
+                        <!------------------------From Date-------------------------------------->
+                        <v-flex xs6 class="pr-1">
+                            <v-dialog ref="fromDate" v-model="fromDialog" :return-value.sync="fromDate" persistent
+                                width="290px">
+                                <template v-slot:activator="{ on, attrs }">
+                                    <v-text-field v-bind="attrs" v-on="on" v-model="fromDate" label="From Date"
+                                        :rules="dateRules.fromDate" prepend-inner-icon="event" readonly outlined>
+                                    </v-text-field>
+                                </template>
+                                <v-date-picker v-model="fromDate" :min="fromMinDate" :max="fromMaxDate" scrollable
+                                    actions>
+                                    <v-spacer></v-spacer>
+                                    <v-btn text color="primary" @click="fromDialog = false">Cancel</v-btn>
+                                    <v-btn text color="primary" @click="$refs.fromDate.save(fromDate)">OK</v-btn>
+                                </v-date-picker>
+                            </v-dialog>
+                        </v-flex>
+                        <!------------------------To Date-------------------------------------->
+                        <v-flex xs6 class="pl-1">
+                            <v-dialog ref="toDate" v-model="toDialog" :return-value.sync="toDate" persistent
+                                width="290px">
+                                <template v-slot:activator="{ on, attrs }">
+                                    <v-text-field v-bind="attrs" v-on="on" v-model="toDate" label="To Date"
+                                        :rules="dateRules.toDate" prepend-inner-icon="event" readonly outlined>
+                                    </v-text-field>
+                                </template>
+                                <v-date-picker v-model="toDate" :min="toMinDate" :max="toMaxDate" scrollable actions>
+                                    <v-spacer></v-spacer>
+                                    <v-btn text color="primary" @click="toDialog = false">Cancel</v-btn>
+                                    <v-btn text color="primary" @click="$refs.toDate.save(toDate)">OK</v-btn>
+                                </v-date-picker>
+                            </v-dialog>
+                        </v-flex>
+                    </v-layout>
+                    <!-- ----------------------------------------------- -->
+                    <v-layout wrap justify-space-between class="py-2">
+                        <v-flex xs10>
+                            <p class="subheading mb-0">Can invite one time user</p>
+                        </v-flex>
+                        <v-flex xs2>
+                            <v-switch color="primary" v-model="guestWithInvite" hide-details class="mt-0"></v-switch>
+                        </v-flex>
+                    </v-layout>
+                    <!-- ----------------------------------------------- -->
+                    <v-layout wrap justify-space-between class="py-2">
+                        <v-flex xs10>
+                            <p class="subheading mb-0">Geo-Restriction</p>
+                        </v-flex>
+                        <v-flex xs2>
+                            <v-switch color="primary" v-model="isGeofencing" hide-details class="mt-0"></v-switch>
+                        </v-flex>
+                    </v-layout>
+                    <v-layout wrap justify-space-between v-if="isGeofencing">
+                        <v-flex xs12 class="pt-3">
+                            <p class="subheading">* User can access the button within this pre defined geofence radius.
+                            </p>
+                        </v-flex>
+                        <v-flex xs12 class="pt-3">
+                            <vue-slider v-bind="options" ref="geoFenceSlider" v-model="geofenceRadius"
+                                @change="geofenceRadiusChange">
+                            </vue-slider>
+                            <br>
+                            <small>* values are in meters <strong>( {{geofenceRadius}} m)</strong> </small>
+                        </v-flex>
+                    </v-layout>
+                    <v-layout wrap justify-space-between class="py-2">
+                        <v-flex xs10>
+                            <p class="subheading mb-0">Time-Restriction
+                                <v-btn v-if="isTimeRestriction" @click="showTimeRestDialog" light icon
+                                    class="primary ma-0 ml-2">
+                                    <v-icon color="white">edit</v-icon>
+                                </v-btn>
+                            </p>
+                        </v-flex>
+                        <v-flex xs2>
+                            <v-switch color="primary" @change="showTimeRestDialog" v-model="isTimeRestriction"
+                                hide-details class="mt-0"></v-switch>
+                        </v-flex>
+                    </v-layout>
+
+                </v-form>
+            </v-card-text>
+            <v-card-actions>
+                <v-btn color="primary" block depressed :disabled="!valid" @click.native="inviteGuest">Send
+                    Invitation</v-btn>
+            </v-card-actions>
+        </v-card>
+    </template>
+    <!---------------------------------------------------------->
+    <template>
+        <v-dialog v-model="confirmInvite" persistent max-width="290">
+            <v-card flat class="no-selection">
+                <v-card-title class="headline pb-0">Klario</v-card-title>
+                <v-card-text><strong>{{userEmailId}}</strong> is not a registered user. Do you want to send an invite?
+                </v-card-text>
+                <v-card-actions>
+                    <v-spacer></v-spacer>
+                    <v-btn color="primary" text @click.native="confirmInviteCloseDialog">No</v-btn>
+                    <v-btn color="primary" text @click.native="inviteConfirmed">Yes</v-btn>
+                </v-card-actions>
+            </v-card>
+        </v-dialog>
+    </template>
+    <!---------------------------------------------------------->
+    <template>
+        <v-layout justify-center>
+            <v-dialog v-model="fullScreenDialog" fullscreen hide-overlay transition="dialog-bottom-transition">
+                <v-card>
+                    <v-toolbar flat class="appThemeColor">
+                        <v-layout wrap>
+                            <v-flex xs2 class="pt-2">
+                                <v-btn text icon v-on:click="closeTimeRestDialog" class="v-align">
+                                    <v-icon>close</v-icon>
+                                </v-btn>
+                            </v-flex>
+
+                            <v-flex xs8 class="text-center">
+                                <v-toolbar-title>
+                                    <klario-logo></klario-logo>
+                                </v-toolbar-title>
+                            </v-flex>
+
+                            <v-flex xs2 class="pt-2">
+                                <v-btn text icon v-on:click="saveTimeScheduler" class="v-align">
+                                    <v-icon>done</v-icon>
+                                </v-btn>
+                            </v-flex>
+                        </v-layout>
+                    </v-toolbar>
+                    <time-scheduler ref="timeSchedulerComponent" v-if="showTimeSchedulerComp" :values="values">
+                    </time-scheduler>
+                </v-card>
+            </v-dialog>
+        </v-layout>
+    </template>
+</div>
